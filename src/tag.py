@@ -1,5 +1,6 @@
 import torch
 import torch.serialization
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from collections import OrderedDict
@@ -7,7 +8,8 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification, Robe
 from src.emotion.model import PretrainedLMModel
 from pytorch_pretrained_bert.optimization import WarmupLinearSchedule
 
-VAD_MODEL_CKPT_PATH = "/data1/yioh/code/ai/maESC/src/emotion/emobank-vad-regression-2520-20.ckpt"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+VAD_MODEL_CKPT_PATH = Path(os.environ.get("M2ESC_VAD_CKPT_PATH", ROOT_DIR / "src" / "emotion" / "emobank-vad-regression-2520-20.ckpt"))
 CATEGORICAL_MODEL_NAME = "SamLowe/roberta-base-go_emotions"
 GOEMOTIONS_LABELS = [
     "admiration","amusement","anger","annoyance","approval","caring","confusion","curiosity",
@@ -39,7 +41,7 @@ def load_vad_model(model_path, device="cuda"):
 
     print(f"Loading VAD model weights from: {model_path}")
     torch.serialization.add_safe_globals([WarmupLinearSchedule])
-    ckpt = torch.load(model_path, map_location=device, weights_only=False)
+    ckpt = torch.load(str(model_path), map_location=device, weights_only=False)
     model.load_state_dict(ckpt["state_dict"], strict=False)
     model.eval()
     print("✅ VAD Model loaded successfully.")

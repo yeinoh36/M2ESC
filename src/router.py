@@ -1,6 +1,10 @@
 import re
 import json
+import os
 from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+PROMPT_DIR = Path(os.environ.get("M2ESC_PROMPT_DIR", ROOT_DIR / "src" / "prompts"))
 
 def generate_json_from_llm(llm, sampling_params, system_prompt, user_contents):
     tokenizer = llm.get_tokenizer()
@@ -41,9 +45,9 @@ def generate_json_from_llm(llm, sampling_params, system_prompt, user_contents):
 
 def predict_esc_stage_and_strategy(llm, sampling_params, batch_data, strategy_mode="2"):
     if strategy_mode == "1":
-        system_prompt = Path("/data1/yioh/code/ai/maESC/src/prompts/sp_router1.txt").read_text(encoding='utf-8')
+        system_prompt = (PROMPT_DIR / "sp_router1.txt").read_text(encoding='utf-8')
     else:
-        system_prompt = Path("/data1/yioh/code/ai/maESC/src/prompts/sp_router2.txt").read_text(encoding='utf-8')
+        system_prompt = (PROMPT_DIR / "sp_router2.txt").read_text(encoding='utf-8')
     # -----------------------------------
 
     user_contents = []

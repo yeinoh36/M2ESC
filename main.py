@@ -1,23 +1,24 @@
 import argparse, os, json, time, torch
+from pathlib import Path
 from vllm import LLM, SamplingParams
 from tqdm import tqdm
 
 torch.set_float32_matmul_precision('high')
 
-from src.memory import manage_dialog_context # #1 Memory Architect
-from src.router import predict_esc_stage_and_strategy # #2 Strategic Router
-from src.specialized import detect_information_gap, analyze_emotion_trajectory, generate_grounded_solution # #3 Expert Ensemble
+from src.memory import manage_dialog_context
+from src.router import predict_esc_stage_and_strategy
+from src.specialized import detect_information_gap, analyze_emotion_trajectory, generate_grounded_solution
 from src.tag import init_tag_models
 from src.rag import init_databases, init_st_model
-from src.respond import generate_response # #4 Synthesis Generator
+from src.respond import generate_response
 
-MODEL_PATH = "/data1/llm-models/Qwen3-14B"
+PROJECT_ROOT = Path(__file__).resolve().parent
+MODEL_PATH = os.environ.get("M2ESC_MODEL_PATH", "/data1/llm-models/Qwen3-14B")
 
 def main(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_ids
     primary_gpu = 0 if torch.cuda.is_available() else 'cpu'
 
-    # 모델 초기화
     init_tag_models(gpu_id=primary_gpu)
     init_st_model(gpu_id=primary_gpu)
     init_databases()
@@ -25,25 +26,21 @@ def main(args):
     llm = LLM(model=MODEL_PATH, tensor_parallel_size=len(args.gpu_ids.split(',')), gpu_memory_utilization=0.5)
     sampling_params = SamplingParams(max_tokens=4096, temperature=0.0)
 
-    data_path = '/data1/yioh/MM/data/ESConv_preprocessed.json'
-    os.makedirs('/data1/yioh/MM/results', exist_ok=True)
+    data_path = PROJECT_ROOT / "data" / "ESConv_preprocessed.json"
+    results_dir = PROJECT_ROOT / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"Loading data from {data_path}...")
-    with open(data_path, 'r', encoding='utf-8') as f:
+    with data_path.open('r', encoding='utf-8') as f:
         dataset = json.load(f)
     
-    # Debug mode: 앞의 3개만 실행
     if args.debug:
         print(f"\n🐛 DEBUG MODE: 앞의 3개 데이터만 실행합니다")
         dataset = dataset[:3]
     
-    # Output path 생성
-    output_base = f'/data1/yioh/MM/results/ESConv_Ours_results'
+    output_base = str(results_dir / "ESConv_Ours_results")
     output_path = f"{output_base}{'_debug' if args.debug else ''}.json"
 
-    # ========================================================
-    # 1. 상태 추적용 데이터 구조 초기화
-    # ========================================================
     active_dialogs = []
     for item in dataset:
         dialog = item.get('dialog', [])
@@ -52,19 +49,16 @@ def main(args):
             "original_dialog_index": item.get("original_dialog_index"),
             "problem_type": item.get("problem_type", ""),
             "full_dialog": dialog,
-            "turn_pointer": 0,             # 항상 User 발화 인덱스를 가리킴
-            "current_prehistory": "",      # 과거 대화 요약 누적
-            "current_history": [],         # 최근 대화 내역 (GT 누적 용도)
-            "predictions_list": [],        # 피드백이 있는 결과만 저장될 리스트
+            "turn_pointer": 0,
+            "current_prehistory": "",
+            "current_history": [],
+            "predictions_list": [],
             "is_done": False
         })
     
     total_start_time = time.time()
     turn_step = 1
 
-    # ========================================================
-    # 2. 계층별 동기화 배치 루프 (Teacher-Forcing 순차 진행)
-    # ========================================================
     while True:
         batch_pipeline_data = []
         batch_mapping = []
@@ -83,10 +77,8 @@ def main(args):
                 d["is_done"] = True
                 continue
 
-            # (1) 이번 턴의 User 대화를 컨텍스트에 추가
             d["current_history"].append(user_turn.copy())
 
-            # (2) Target (Assistant 대화 - 내가 예측해야 할 정답) 확인
             a_idx = u_idx + 1
             target_turn = d["full_dialog"][a_idx]
             
@@ -94,7 +86,6 @@ def main(args):
                 d["is_done"] = True
                 continue
 
-            # (3) 피드백 확인: Assistant 턴의 annotation에서 feedback 읽기
             has_feedback = False
             feedback_val = ""
             next_u_idx = a_idx + 1
@@ -133,11 +124,6 @@ def main(args):
 
         print(f"\n[{turn_step}턴 차례] 진행 중 (활성 대화: {len(batch_pipeline_data)}개)")
         
-        # ----------------------------------------
-        # 파이프라인 수행 (Stage 1 ~ 4 모델 순차 생성)
-        # ----------------------------------------
-        
-        # Stage 1: Memory Architect (요약)
         summary_targets = []
         summary_indices = []
         for idx, p in enumerate(batch_pipeline_data):
@@ -148,7 +134,7 @@ def main(args):
                     "older_dialogs": recent_dialog[:-5]
                 })
                 summary_indices.append(idx)
-                p["data"]["recent_dialog"] = recent_dialog[-5:] # 최신 5개로 절삭
+                p["data"]["recent_dialog"] = recent_dialog[-5:]
 
         if summary_targets:
             print(f" ⏳ [Stage 1] Memory Architect 작동 중 ({len(summary_targets)}개 대화 요약)")
@@ -168,7 +154,6 @@ def main(args):
                 print(f"Memory Architect 배치 예측 중 오류 발생: {e}")
                 pass
 
-        # Stage 2: Strategic Router
         valid_indices = [i for i, p in enumerate(batch_pipeline_data) if not p["skip"]]
         if valid_indices:
             print(f" ⏳ [Stage 2] Strategic Router 작동 중")
@@ -189,7 +174,6 @@ def main(args):
                 print(f"Strategic Router 배치 예측 중 오류 발생: {e}")
                 pass
 
-        # Stage 3: Expert Ensemble
         exploration_idx, comforting_idx, action_idx = [], [], []
         for i, p in enumerate(batch_pipeline_data):
             if p["skip"]: continue
@@ -247,7 +231,6 @@ def main(args):
                 print(f"Action Agent 배치 예측 중 오류 발생: {e}")
                 pass
 
-        # Stage 4: Synthesis Generator
         valid_indices = [i for i, p in enumerate(batch_pipeline_data) if not p["skip"]]
         if valid_indices:
             print(f" ⏳ [Stage 4] Synthesis Generator 작동 중 ({len(valid_indices)}개 응답 생성)")
@@ -265,38 +248,25 @@ def main(args):
                 print(f"Synthesis Generator 배치 예측 중 오류 발생: {e}")
                 pass
 
-        # ----------------------------------------
-        # 💡 결과 반영 및 GT-Forcing 동기화 
-        # ----------------------------------------
         for p_data, d_state in zip(batch_pipeline_data, batch_mapping):
             res = p_data["result"]
-
-            # 1. 갱신된 요약 내용을 기록하여 다음 턴부터 유지
             d_state["current_prehistory"] = p_data["data"]["prehistory_summary"]
 
-            # 2. 피드백이 있는 턴에 한해서만, (에러가 나서 빈값이어도) 기록을 남김
             if res["target_has_feedback"]:
                 d_state["predictions_list"].append(res)
-            
-            # 3. Memory Architect 때문에 잘렸던 히스토리를 현재 대화 상태로 동기화
+
             d_state["current_history"] = p_data["data"]["recent_dialog"][:]
 
-            # 4. 다음 판을 위해 GT(원본 정답 Assistant 답변)를 히스토리에 삽입!
             d_state["current_history"].append(d_state["_target_turn_backup"].copy())
 
-            # 5. 다음 User 발화 위치로 포인터 이동
             d_state["turn_pointer"] = d_state["_next_u_idx_backup"]
 
         turn_step += 1
 
-    # ========================================================
-    # 3. 최종 결과물 포맷팅 및 디스크 저장
-    # ========================================================
     final_results = []
     total_saved_predictions = 0
 
     for d in active_dialogs:
-        # 평가 기록(predictions_list)이 존재하는 대화 블록만 추출
         if d["predictions_list"]:
             total_saved_predictions += len(d["predictions_list"])
             final_results.append({

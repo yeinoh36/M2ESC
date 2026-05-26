@@ -1,6 +1,10 @@
 import re
 import json
+import os
 from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+PROMPT_DIR = Path(os.environ.get("M2ESC_PROMPT_DIR", ROOT_DIR / "src" / "prompts"))
 
 def generate_json_from_llm(llm, sampling_params, system_prompt, user_contents):
     tokenizer = llm.get_tokenizer()
@@ -39,7 +43,7 @@ def generate_json_from_llm(llm, sampling_params, system_prompt, user_contents):
     return results
 
 def manage_dialog_context(llm, sampling_params, batch_data):
-    system_prompt = Path("/data1/yioh/code/ai/maESC/src/prompts/sp_memory.txt").read_text(encoding='utf-8')
+    system_prompt = (PROMPT_DIR / "sp_memory.txt").read_text(encoding='utf-8')
     
     user_contents = []
     

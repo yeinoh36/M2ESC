@@ -1,6 +1,10 @@
 import json
 import re
+import os
 from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+PROMPT_DIR = Path(os.environ.get("M2ESC_PROMPT_DIR", ROOT_DIR / "src" / "prompts"))
 
 def generate_json_from_llm(llm, sampling_params, system_prompt, user_contents):
     tokenizer = llm.get_tokenizer()
@@ -83,7 +87,7 @@ def build_synthesis_content(item):
     )
 
 def generate_response(llm, sampling_params, batch_data):
-    system_prompt_path = Path("/data1/yioh/code/ai/maESC/src/prompts/sp_respond.txt")
+    system_prompt_path = PROMPT_DIR / "sp_respond.txt"
     system_prompt = system_prompt_path.read_text(encoding='utf-8')
     user_contents = [build_synthesis_content(item) for item in batch_data]
     json_results = generate_json_from_llm(llm, sampling_params, system_prompt, user_contents)

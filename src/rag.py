@@ -6,7 +6,8 @@ from pathlib import Path
 from sentence_transformers import SentenceTransformer, util
 from rank_bm25 import BM25Okapi
 
-ACTION_DB_PATH = "/data1/yioh/code/ai/data/knowledge_db.json"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+ACTION_DB_PATH = Path(os.environ.get("M2ESC_ACTION_DB_PATH", ROOT_DIR / "data" / "knowledge_db.json"))
 BM25_INDEXES = {}
 
 _st_model = None
@@ -17,9 +18,9 @@ def init_databases():
     if not BM25Okapi: return
     
     raw_databases = {"wikihow": [], "reddit": [], "counselchat": []}
-    if os.path.exists(ACTION_DB_PATH):
+    if ACTION_DB_PATH.exists():
         print(f"📦 Loading Action DB from {ACTION_DB_PATH}...")
-        with open(ACTION_DB_PATH, 'r', encoding='utf-8') as f:
+        with ACTION_DB_PATH.open('r', encoding='utf-8') as f:
             data = json.load(f)
             raw_databases["wikihow"] = data.get("wikihow", [])
             raw_databases["reddit"] = data.get("reddit", [])

@@ -12,6 +12,8 @@ import numpy as np
 import random
 import math
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
 
 class EmotionDatasetLoader():
 
@@ -50,9 +52,9 @@ class EmotionDatasetLoader():
 
     def _get_emotion_label_VAD_scores(self):
         vad_score_dict = {}
-        dir_path = "/data1/yioh/code/ai/data/NRC-VAD/"
+        dir_path = os.environ.get("M2ESC_NRC_VAD_DIR", os.path.join(PROJECT_ROOT, "data", "NRC-VAD"))
         vad_scores = pd.read_csv(
-            dir_path + "NRC-VAD-Lexicon.txt", sep='\t', index_col='Word')
+            os.path.join(dir_path, "NRC-VAD-Lexicon.txt"), sep='\t', index_col='Word')
         for w, (v, a, d) in vad_scores.iterrows():
             vad_score_dict[w] = (round(v, 3), round(a, 3), round(d, 3))
         return vad_score_dict
@@ -129,7 +131,6 @@ class EmobankLoader(EmotionDatasetLoader):
         """
         cleaned_text = []
         for t in text:
-            # t = t.strip('\"').strip('\'').strip()
             t = str(t).strip('\"').strip('\'').strip()
             t = re.sub(r'([{}])'.format(string.punctuation), r' \1 ', t)
             t = re.sub('\s{2,}', ' ', t)  # pad punctuations for bpe
@@ -293,7 +294,6 @@ class ISEARLoader(EmotionDatasetLoader):
         for id_, (raw_text, emotion_id, emotion_text) in df.iterrows():
             text = self._preprocessing_text(raw_text)
             data.append((text, emotion_text))
-            #print(text, emotion_text)
         data = pd.DataFrame(data, columns=self.data_types)
         return data
 
@@ -422,7 +422,6 @@ class IEMOCAPCatLoader(EmotionDatasetLoader):
 
     def _change_label_name_to_NRC_VAD_label(self, label):
         # Counter({'xxx': 2507, 'fru': 1849, 'neu': 1708, 'ang': 1103, 'sad': 1084, 'exc': 1041, 'hap': 595, 'sur': 107, 'fea': 40, 'oth': 3, 'dis': 2})
-        # original_emotion_label = ['ang', 'hap', 'sad', 'fru', 'exc', 'fea', 'sur', 'neu', 'dis']#, 'oth',  'xxx']
         # original_label: {angry, happy, sad, neutral, frustrated, excited, fearful, surprised, disgusted, other}
         map_to_NRC_VAD_label_dict = {'ang': 'anger', 'hap': 'happy', 'sad': 'sadness', 'fru': 'frustrate',
                                      'exc': 'excite', 'fea': 'fear', 'sur': 'surprise', 'dis': 'disgust', 'neu': 'neutral'}
@@ -537,7 +536,6 @@ class IEMOCAPVADLoader(EmotionDatasetLoader):
 
     def _change_label_name_to_NRC_VAD_label(self, label):
         # Counter({'xxx': 2507, 'fru': 1849, 'neu': 1708, 'ang': 1103, 'sad': 1084, 'exc': 1041, 'hap': 595, 'sur': 107, 'fea': 40, 'oth': 3, 'dis': 2})
-        # original_emotion_label = ['ang', 'hap', 'sad', 'fru', 'exc', 'fea', 'sur', 'neu', 'dis']#, 'oth',  'xxx']
         # original_label: {angry, happy, sad, neutral, frustrated, excited, fearful, surprised, disgusted, other}
         map_to_NRC_VAD_label_dict = {'ang': 'anger', 'hap': 'happy', 'sad': 'sadness', 'fru': 'frustrate',
                                      'exc': 'excite', 'fea': 'fear', 'sur': 'surprise', 'dis': 'disgust', 'neu': 'neutral'}
@@ -812,7 +810,6 @@ def main():
     print("---- EMOBANK ----")
     emobank = EmobankLoader()
     data = emobank.load_data()
-    # emobank.validate_splits()
     emobank.check_number_of_data()
 
     print("---- SEMEVAL 2018 E-c ----")
@@ -826,23 +823,6 @@ def main():
     data = isear.load_data()
     isear.check_number_of_data()
     print(isear.get_vad_coordinates_of_labels())
-
-    # print("---- SSEC ----")
-    # ssec = SSECLoader()
-    # data = ssec.load_data()
-    # ssec.check_number_of_data()
-    # print(ssec.get_vad_coordinates_of_labels())
-
-    # print("---- IEMOCAPCAT ----")
-    # iemocapcat = IEMOCAPCatLoader()
-    # data = iemocapcat.load_data()
-    # iemocapcat.check_number_of_data()
-    # print(iemocapcat.get_vad_coordinates_of_labels())
-
-    # print("---- IEMOCAPVAD ----")
-    # iemocapvad = IEMOCAPVADLoader()
-    # data = iemocapvad.load_data()
-    # iemocapvad.check_number_of_data()
 
     print("---- GOEMOTIONS ----")
     goemotions = GOEMOTIONSLoader()

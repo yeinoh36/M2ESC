@@ -1,8 +1,12 @@
 import re
 import json
+import os
 from pathlib import Path
 from src.tag import get_emotion_tags
 from src.rag import perform_hybrid_search
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+PROMPT_DIR = Path(os.environ.get("M2ESC_PROMPT_DIR", ROOT_DIR / "src" / "prompts"))
 
 def generate_json_from_llm(llm, sampling_params, system_prompt, user_contents):
     tokenizer = llm.get_tokenizer()
@@ -56,7 +60,7 @@ def build_user_content(item):
 # 3-1. Exploration Agent
 # ==========================================
 def detect_information_gap(llm, sampling_params, batch_data):
-    system_prompt = Path("/data1/yioh/code/ai/maESC/src/prompts/sp_exploration.txt").read_text(encoding='utf-8')
+    system_prompt = (PROMPT_DIR / "sp_exploration.txt").read_text(encoding='utf-8')
     user_contents = [build_user_content(item) for item in batch_data]
     return generate_json_from_llm(llm, sampling_params, system_prompt, user_contents)
 
@@ -65,7 +69,7 @@ def detect_information_gap(llm, sampling_params, batch_data):
 # 3-2. Comforting Agent
 # ==========================================
 def analyze_emotion_trajectory(llm, sampling_params, batch_data):
-    system_prompt = Path("/data1/yioh/code/ai/maESC/src/prompts/sp_comforting.txt").read_text(encoding='utf-8')
+    system_prompt = (PROMPT_DIR / "sp_comforting.txt").read_text(encoding='utf-8')
     
     user_contents = []
     for item in batch_data:
@@ -99,8 +103,8 @@ def analyze_emotion_trajectory(llm, sampling_params, batch_data):
 # 3-3. Action Agent
 # ==========================================
 def generate_grounded_solution(llm, sampling_params, batch_data):
-    query_prompt = Path("/data1/yioh/code/ai/maESC/src/prompts/sp_action_plan.txt").read_text(encoding='utf-8')
-    action_prompt = Path("/data1/yioh/code/ai/maESC/src/prompts/sp_action_act.txt").read_text(encoding='utf-8')
+    query_prompt = (PROMPT_DIR / "sp_action_plan.txt").read_text(encoding='utf-8')
+    action_prompt = (PROMPT_DIR / "sp_action_act.txt").read_text(encoding='utf-8')
     
     query_contents = [build_user_content(item) for item in batch_data]
     query_results = generate_json_from_llm(llm, sampling_params, query_prompt, query_contents)
